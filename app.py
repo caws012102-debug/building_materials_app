@@ -5,10 +5,8 @@ import os
 import base64
 from PIL import Image
 
-# 1. 取得目前 app.py 檔案所在的資料夾絕對路徑
+# 動態絕對路徑定位，確保在雲端與本機皆能正確讀寫
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 2. 將資料庫與圖片資料夾定位在該絕對路徑下
 DATA_FILE = os.path.join(BASE_DIR, "building_data.json")
 IMAGE_DIR = os.path.join(BASE_DIR, "uploaded_images")
 
@@ -17,7 +15,10 @@ if not os.path.exists(IMAGE_DIR):
 
 # ================= 輔助與資料清洗函式 =================
 def image_to_base64(img_path):
-    with open(img_path, "rb") as image_file:
+    # 僅提取檔名並重新動態組合，徹底避開 Windows (\) 與 Linux (/) 的斜線相容問題
+    filename = os.path.basename(img_path)
+    abs_path = os.path.join(IMAGE_DIR, filename)
+    with open(abs_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode()
 
 def parse_common(val):
@@ -32,18 +33,12 @@ def clean_spec(val):
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        # 將預設資料修改為完全空白的結構
-        default_data = {
-            "原料": {},
-            "物料": {}, 
-            "消耗品": {}
-        }
+        default_data = {"原料": {}, "物料": {}, "消耗品": {}}
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(default_data, f, ensure_ascii=False, indent=4)
             
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         raw_db = json.load(f)
-        # 資料結構與舊欄位自動遷移機制
         for m_cat, sub_dict in raw_db.items():
             for s_cat, content in sub_dict.items():
                 if isinstance(content, list):
@@ -126,7 +121,6 @@ div[data-testid="stButton"] button[kind="primary"] {
     background-color: rgba(128, 128, 128, 0.05) !important; 
 }
 
-/* 檢視模式表格樣式 */
 .view-table table { 
     width: 100% !important; 
     table-layout: fixed !important; 
@@ -278,7 +272,7 @@ with col2:
         if st.session_state.logged_in and st.session_state.sub_cat:
             with sh2:
                 if st.button("✏️", key="btn_edit_s"): st.session_state.edit_s = True; st.rerun()
-            with sh3:
+            with h3:
                 if st.button("🗑️", key="btn_del_s"):
                     del st.session_state.db[st.session_state.main_cat][st.session_state.sub_cat]
                     st.session_state.sub_cat = None; st.session_state.edit_s = False
@@ -320,9 +314,12 @@ with col3:
                 if st.session_state.logged_in:
                     up_img = st.file_uploader("📸 變更代表圖", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
                     if up_img is not None:
-                        save_path = os.path.join(IMAGE_DIR, f"rep_{st.session_state.sub_cat}_{up_img.name}")
+                        # 儲存圖片
+                        filename = f"rep_{st.session_state.sub_cat}_{up_img.name}"
+                        save_path = os.path.join(IMAGE_DIR, filename)
                         with open(save_path, "wb") as f: f.write(up_img.getbuffer())
-                        st.session_state.db[st.session_state.main_cat][st.session_state.sub_cat]["代表圖"] = save_path
+                        # 關鍵修正：資料庫只存檔名，避免路徑反斜線衝突
+                        st.session_state.db[st.session_state.main_cat][st.session_state.sub_cat]["代表圖"] = filename
                         save_data(st.session_state.db)
                         st.rerun()
                         
